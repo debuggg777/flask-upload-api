@@ -14,9 +14,8 @@ VALID = {
     "ABC1": {"type": "Էվն Իգազարյան"},
     "ABC2": {"type": "Նարեկ Թովմասյան"},
     "ABC3": {"type": "Արտյոմ Եղիազարյան"},
-    "ABC4 ": {"type": "Վահե Այվազյան"},
-    "ABC5 ": {"type": "Էրիկ Եղոյան"
-                      ""}
+    "ABC4": {"type": "Վահե Այվազյան"},
+    "ABC5": {"type": "Էրիկ Եղոյան"}
 }
 
 # --- Сохранение записи ---
@@ -100,11 +99,10 @@ def upload():
 
         html_template = """
         <h2>Результат проверки QR</h2>
-        <p>Код: {{ record['code'] }}</p>
         <p>Пользователь: {{ record['user_type'] }}</p>
         <p>Устройство: {{ record['device'] }}</p>
         <p>Время отправки: {{ record['time_sent'] }}</p>
-        <p>Время получения (Ереван): {{ record['received_at'] }}</p>
+        <p>Время получения (Ереван): {{ record['received_at'][:19] }}</p>
         <p>Статус: {% if record['on_time'] %}Пройдено вовремя ✅{% else %}Опоздание ❌{% endif %}</p>
         <p><a href="/files/{{ filename }}" target="_blank">📄 Скачать JSON</a></p>
         """
@@ -131,12 +129,15 @@ def all_scans_view():
             path = os.path.join(SAVE_FOLDER, file)
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+                # форматируем время
+                dt = datetime.fromisoformat(data.get("received_at"))
+                data["received_at_formatted"] = dt.strftime("%Y-%m-%d %H:%M:%S")
                 all_records.append(data)
 
-    html = "<h2>Все сканы</h2><table border='1'><tr><th>Код</th><th>Пользователь</th><th>Устройство</th><th>Время</th><th>Статус</th></tr>"
+    html = "<h2>Все сканы</h2><table border='1'><tr><th>Пользователь</th><th>Время</th><th>Статус</th></tr>"
     for r in all_records:
         status = "✅" if r.get("on_time") else "❌"
-        html += f"<tr><td>{r.get('code')}</td><td>{r.get('user_type')}</td><td>{r.get('device')}</td><td>{r.get('received_at')}</td><td>{status}</td></tr>"
+        html += f"<tr><td>{r.get('user_type')}</td><td>{r.get('received_at_formatted')}</td><td>{status}</td></tr>"
     html += "</table>"
     return html
 
@@ -144,5 +145,3 @@ def all_scans_view():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
-
-
