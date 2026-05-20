@@ -1,7 +1,7 @@
-from flask import Flask, request, jsonify, render_template_string, send_from_directory, Response
+from flask import Flask, request, jsonify, render_template_string, send_from_directory
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
-import os, json, uuid, queue, threading
+import os, json, uuid
 
 app = Flask(__name__)
 
@@ -39,47 +39,6 @@ VALID = {
 }
 
 
-# --- SSE ---
-_sse_listeners = []
-_sse_lock = threading.Lock()
-
-def _broadcast(event_data):
-    payload = f"data: {json.dumps(event_data, ensure_ascii=False)}\n\n"
-    with _sse_lock:
-        dead = []
-        for q in _sse_listeners:
-            try:
-                q.put_nowait(payload)
-            except queue.Full:
-                dead.append(q)
-        for q in dead:
-            _sse_listeners.remove(q)
-
-@app.route("/events")
-def sse_stream():
-    q = queue.Queue(maxsize=20)
-    with _sse_lock:
-        _sse_listeners.append(q)
-
-    def generate():
-        yield ": keepalive\n\n"
-        try:
-            while True:
-                try:
-                    msg = q.get(timeout=30)
-                    yield msg
-                except queue.Empty:
-                    yield ": keepalive\n\n"
-        except GeneratorExit:
-            with _sse_lock:
-                try:
-                    _sse_listeners.remove(q)
-                except ValueError:
-                    pass
-
-    return Response(generate(), mimetype="text/event-stream",
-                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-
 
 # --- Сохранение записи ---
 def save_record(rec):
@@ -102,6 +61,13 @@ def get_last_record_by_code(code):
                 if data.get("code") == code:
                     return data, file
     return None, None
+
+
+# --- API: количество файлов (для polling) ---
+@app.route("/scan_count")
+def scan_count():
+    count = sum(1 for f in os.listdir(SAVE_FOLDER) if f.endswith(".json"))
+    return jsonify({"count": count})
 
 
 # --- Основной маршрут ---
@@ -142,9 +108,6 @@ def upload():
         }
 
         filename = save_record(record)
-
-        # Пушим событие всем открытым вкладкам
-        _broadcast({"event": "new_scan"})
 
         msg = "Пройдено вовремя ✅" if on_time else "Опоздание ❌"
         allowed = on_time if code in VALID else False
@@ -205,7 +168,7 @@ ALL_SCANS_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <h2>📡 Все сканы (live)</h2>
-<div id="status">Подключаемся...</div>
+<div id="status">🟡 Ожидаем сканы...</div>
 <table>
   <thead><tr>
     <th>Пользователь</th><th>Время</th><th>Статус</th>
@@ -223,23 +186,25 @@ ALL_SCANS_HTML = """<!DOCTYPE html>
   </tbody>
 </table>
 <script>
-const status = document.getElementById('status');
+  // Polling: каждые 3 секунды проверяем количество файлов.
+  // Если изменилось — перезагружаем страницу.
+  let lastCount = {{ count }};
+  const status = document.getElementById('status');
+  status.textContent = '🟢 Авто-обновление включено (каждые 3 сек)';
 
-function connect() {
-  const es = new EventSource('/events');
-  es.onopen = () => { status.textContent = '🟢 Подключено — обновляется автоматически'; };
-  es.onmessage = (e) => {
-    const msg = JSON.parse(e.data);
-    if (msg.event === 'new_scan') location.reload();
-  };
-  es.onerror = () => {
-    status.textContent = '🔴 Соединение потеряно, переподключаемся...';
-    es.close();
-    setTimeout(connect, 3000);
-  };
-}
-
-connect();
+  setInterval(() => {
+    fetch('/scan_count')
+      .then(r => r.json())
+      .then(data => {
+        if (data.count !== lastCount) {
+          lastCount = data.count;
+          location.reload();
+        }
+      })
+      .catch(() => {
+        status.textContent = '🔴 Нет связи с сервером...';
+      });
+  }, 3000);
 </script>
 </body>
 </html>
@@ -258,10 +223,11 @@ def all_scans_view():
                 data["received_at_formatted"] = dt.strftime("%Y-%m-%d %H:%M:%S")
                 all_records.append(data)
 
-    return render_template_string(ALL_SCANS_HTML, records=all_records)
+    count = len(all_records)
+    return render_template_string(ALL_SCANS_HTML, records=all_records, count=count)
 
 
 # --- Запуск ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True, threaded=True)
+    app.run(host="0.0.0.0", port=port, debug=False)
