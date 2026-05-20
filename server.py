@@ -102,7 +102,7 @@ def upload():
         }
 
         filename = save_record(record)
-        msg = "ժամանակին ✅" if on_time else "ուշացում ❌"
+        msg = [ժամանակին ✅] if on_time else [ուշացում ❌]
         allowed = on_time if code in VALID else False
 
         return jsonify({
@@ -141,7 +141,7 @@ def list_files():
 
 
 ALL_SCANS_HTML = """<!DOCTYPE html>
-<html lang="ru">
+<html lang="hy">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
