@@ -40,17 +40,15 @@ VALID = {
 
 
 
-# --- Сохранение записи ---
 def save_record(rec):
     fname = f"scan_{datetime.now(ZoneInfo('Asia/Yerevan')).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.json"
     path = os.path.join(SAVE_FOLDER, fname)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(rec, f, ensure_ascii=False, indent=2)
-    print(f"Saved JSON file: {path}")
+    print(f"Saved: {path}")
     return fname
 
 
-# --- Поиск последнего скана по коду ---
 def get_last_record_by_code(code):
     files = sorted(os.listdir(SAVE_FOLDER), reverse=True)
     for file in files:
@@ -63,14 +61,12 @@ def get_last_record_by_code(code):
     return None, None
 
 
-# --- API: количество файлов (для polling) ---
 @app.route("/scan_count")
 def scan_count():
     count = sum(1 for f in os.listdir(SAVE_FOLDER) if f.endswith(".json"))
     return jsonify({"count": count})
 
 
-# --- Основной маршрут ---
 @app.route("/upload", methods=["GET", "POST"])
 def upload():
     erevan_now = datetime.now(ZoneInfo("Asia/Yerevan"))
@@ -80,8 +76,6 @@ def upload():
             return jsonify({"status": "error", "msg": "expected JSON"}), 400
 
         payload = request.get_json()
-        print("Received JSON:", payload)
-
         raw_code = payload.get("code", "{}")
         try:
             code_data = json.loads(raw_code) if isinstance(raw_code, str) else raw_code
@@ -108,7 +102,6 @@ def upload():
         }
 
         filename = save_record(record)
-
         msg = "Пройдено вовремя ✅" if on_time else "Опоздание ❌"
         allowed = on_time if code in VALID else False
 
@@ -120,7 +113,7 @@ def upload():
             "file": f"/files/{filename}"
         }), 200
 
-    else:  # GET
+    else:
         code = (request.args.get("id") or "").strip()
         record, filename = get_last_record_by_code(code)
         if not record:
@@ -138,7 +131,6 @@ def upload():
         return render_template_string(html_template, record=record, filename=filename)
 
 
-# --- Отдача файлов ---
 @app.route("/files/<filename>")
 def get_file(filename):
     return send_from_directory(SAVE_FOLDER, filename, as_attachment=True)
@@ -148,62 +140,229 @@ def list_files():
     return jsonify({"files": os.listdir(SAVE_FOLDER)})
 
 
-# --- Все сканы ---
 ALL_SCANS_HTML = """<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Все сканы</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Журнал посещаемости</title>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  body { font-family: monospace; background: #0f0f0f; color: #e0e0e0; padding: 20px; }
-  h2 { color: #7fff7f; }
-  table { border-collapse: collapse; width: 100%; }
-  th { background: #1a1a2e; color: #7fff7f; padding: 8px 12px; text-align: left; }
-  td { padding: 8px 12px; border-bottom: 1px solid #222; }
-  tr:hover td { background: #1a1a1a; }
-  .ok  { color: #7fff7f; }
-  .bad { color: #ff6b6b; }
-  #status { margin-bottom: 12px; font-size: 13px; color: #888; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --black: #0a0a0a;
+    --white: #f8f7f4;
+    --gray-100: #f0ede8;
+    --gray-200: #ddd9d2;
+    --gray-400: #9c9690;
+    --gray-600: #5a5652;
+    --pass: #1a1a1a;
+    --fail: #888;
+  }
+
+  body {
+    background: var(--white);
+    color: var(--black);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+  }
+
+  header {
+    border-bottom: 2px solid var(--black);
+    padding: 28px 48px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  .logo {
+    font-family: 'EB Garamond', serif;
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+
+  .date-label {
+    font-size: 11px;
+    color: var(--gray-400);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .meta-bar {
+    padding: 14px 48px;
+    border-bottom: 1px solid var(--gray-200);
+    display: flex;
+    gap: 40px;
+  }
+
+  .meta-item {
+    font-size: 11px;
+    color: var(--gray-400);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .meta-item span {
+    color: var(--black);
+    font-weight: 500;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  thead tr {
+    border-bottom: 1px solid var(--black);
+  }
+
+  th {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--gray-400);
+    padding: 14px 48px;
+    text-align: left;
+  }
+
+  td {
+    padding: 16px 48px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--gray-100);
+    vertical-align: middle;
+  }
+
+  tbody tr {
+    transition: background 0.15s;
+  }
+
+  tbody tr:hover td {
+    background: var(--gray-100);
+  }
+
+  .col-name {
+    font-family: 'EB Garamond', serif;
+    font-size: 16px;
+    color: var(--black);
+  }
+
+  .col-time {
+    color: var(--gray-600);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 2px;
+  }
+
+  .badge-pass {
+    background: var(--black);
+    color: var(--white);
+  }
+
+  .badge-fail {
+    background: transparent;
+    color: var(--gray-400);
+    border: 1px solid var(--gray-200);
+  }
+
+  .row-num {
+    color: var(--gray-200);
+    font-size: 11px;
+    width: 40px;
+    padding-left: 48px;
+    padding-right: 0;
+  }
+
+  footer {
+    border-top: 1px solid var(--gray-200);
+    padding: 20px 48px;
+    font-size: 11px;
+    color: var(--gray-400);
+    letter-spacing: 0.08em;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  tbody tr {
+    animation: fadeIn 0.3s ease both;
+  }
+  {% for i in range(records|length) %}
+  tbody tr:nth-child({{ i+1 }}) { animation-delay: {{ i * 0.03 }}s; }
+  {% endfor %}
 </style>
 </head>
 <body>
-<h2>📡 Все сканы (live)</h2>
-<div id="status">🟡 Ожидаем сканы...</div>
+
+<header>
+  <div class="logo">Журнал посещаемости</div>
+  <div class="date-label" id="today-date"></div>
+</header>
+
+<div class="meta-bar">
+  <div class="meta-item">Всего записей: <span>{{ records|length }}</span></div>
+  <div class="meta-item">Вовремя: <span>{{ records|selectattr('on_time')|list|length }}</span></div>
+  <div class="meta-item">Опоздания: <span>{{ records|rejectattr('on_time')|list|length }}</span></div>
+</div>
+
 <table>
-  <thead><tr>
-    <th>Пользователь</th><th>Время</th><th>Статус</th>
-  </tr></thead>
+  <thead>
+    <tr>
+      <th style="width:60px;">#</th>
+      <th>Имя</th>
+      <th>Время</th>
+      <th>Статус</th>
+    </tr>
+  </thead>
   <tbody>
     {% for r in records %}
     <tr>
-      <td>{{ r.get('user_type','—') }}</td>
-      <td>{{ r.get('received_at_formatted','—') }}</td>
-      <td class="{{ 'ok' if r.get('on_time') else 'bad' }}">
-        {{ '✅' if r.get('on_time') else '❌' }}
+      <td class="row-num">{{ loop.index }}</td>
+      <td class="col-name">{{ r.get('user_type', '—') }}</td>
+      <td class="col-time">{{ r.get('received_at_formatted', '—') }}</td>
+      <td>
+        {% if r.get('on_time') %}
+          <span class="badge badge-pass">Вовремя</span>
+        {% else %}
+          <span class="badge badge-fail">Опоздание</span>
+        {% endif %}
       </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
-<script>
-  // Polling: каждые 3 секунды проверяем количество файлов.
-  // Если изменилось — перезагружаем страницу.
-  let lastCount = {{ count }};
-  const status = document.getElementById('status');
-  status.textContent = '🟢 Авто-обновление включено (каждые 3 сек)';
 
+<footer id="footer-ts"></footer>
+
+<script>
+  // Дата в шапке
+  const now = new Date();
+  document.getElementById('today-date').textContent =
+    now.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' });
+  document.getElementById('footer-ts').textContent =
+    'Последнее обновление: ' + now.toLocaleTimeString('ru-RU');
+
+  // Polling
+  let lastCount = {{ count }};
   setInterval(() => {
     fetch('/scan_count')
       .then(r => r.json())
-      .then(data => {
-        if (data.count !== lastCount) {
-          lastCount = data.count;
-          location.reload();
-        }
-      })
-      .catch(() => {
-        status.textContent = '🔴 Нет связи с сервером...';
-      });
+      .then(d => { if (d.count !== lastCount) location.reload(); })
+      .catch(() => {});
   }, 3000);
 </script>
 </body>
@@ -220,14 +379,12 @@ def all_scans_view():
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 dt = datetime.fromisoformat(data.get("received_at"))
-                data["received_at_formatted"] = dt.strftime("%Y-%m-%d %H:%M:%S")
+                data["received_at_formatted"] = dt.strftime("%d.%m.%Y  %H:%M:%S")
                 all_records.append(data)
 
-    count = len(all_records)
-    return render_template_string(ALL_SCANS_HTML, records=all_records, count=count)
+    return render_template_string(ALL_SCANS_HTML, records=all_records, count=len(all_records))
 
 
-# --- Запуск ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
