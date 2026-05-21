@@ -207,7 +207,7 @@ ALL_SCANS_HTML = """<!DOCTYPE html>
     <th style="width:60px;">#</th>
     <th>Անուն</th>
     <th>Ժամանակ</th>
-    <th>Կարգավիճak</th>
+    <th>Կարգավիճակ</th>
   </tr></thead>
   <tbody>
     {% for r in records %}
@@ -221,14 +221,14 @@ ALL_SCANS_HTML = """<!DOCTYPE html>
             <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M2 6L5 9L10 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            Ժամанаkин
+            Ժամանակին
           </span>
         {% else %}
           <span class="badge badge-fail">
             <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M3 3L9 9M9 3L3 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
             </svg>
-            Ուшацум
+            Ուշացում
           </span>
         {% endif %}
       </td>
