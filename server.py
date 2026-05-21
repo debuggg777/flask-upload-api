@@ -39,6 +39,13 @@ VALID = {
 }
 
 
+def normalize_on_time(val):
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        return val.strip().lower() in ("true", "1", "yes")
+    return bool(val)
+
 
 def save_record(rec):
     fname = f"scan_{datetime.now(ZoneInfo('Asia/Yerevan')).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.json"
@@ -102,7 +109,7 @@ def upload():
         }
 
         filename = save_record(record)
-        msg = "ժամանակին✅" if on_time else "ուշացում❌"
+        msg = "Ժամանակին ✅" if on_time else "Ուշացում ❌"
         allowed = on_time if code in VALID else False
 
         return jsonify({
@@ -117,18 +124,19 @@ def upload():
         code = (request.args.get("id") or "").strip()
         record, filename = get_last_record_by_code(code)
         if not record:
-            return f"<p>Կոդի համար գրառումներ չկան {code}</p>", 404
+            return f"<p>Կոդի համար գրառումներ չկան՝ {code}</p>", 404
 
+        on_time_val = normalize_on_time(record.get("on_time"))
         html_template = """
-        <h2>Verification result QR</h2>
-        <p>User: {{ record['user_type'] }}</p>
-        <p>Device: {{ record['device'] }}</p>
-        <p>Sending time: {{ record['time_sent'] }}</p>
-        <p>Time of receipt (Yerevan): {{ record['received_at'][:19] }}</p>
-        <p>Status: {% if record['on_time'] %}ժամանակին ✅{% else %}ուշացում ❌{% endif %}</p>
-        <p><a href="/files/{{ filename }}" target="_blank">📄 download JSON</a></p>
+        <h2>QR ստուգման արդյունք</h2>
+        <p>Օգտատեր: {{ record['user_type'] }}</p>
+        <p>Սարք: {{ record['device'] }}</p>
+        <p>Ուղարկման ժամը: {{ record['time_sent'] }}</p>
+        <p>Ստացման ժամը (Երևան): {{ record['received_at'][:19] }}</p>
+        <p>Կարգավիճակ: {% if on_time %}Ժամանակին ✅{% else %}Ուշացում ❌{% endif %}</p>
+        <p><a href="/files/{{ filename }}" target="_blank">📄 Ներբեռնել JSON</a></p>
         """
-        return render_template_string(html_template, record=record, filename=filename)
+        return render_template_string(html_template, record=record, filename=filename, on_time=on_time_val)
 
 
 @app.route("/files/<filename>")
@@ -149,7 +157,6 @@ ALL_SCANS_HTML = """<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
   :root {
     --black: #0a0a0a;
     --white: #f8f7f4;
@@ -157,206 +164,87 @@ ALL_SCANS_HTML = """<!DOCTYPE html>
     --gray-200: #ddd9d2;
     --gray-400: #9c9690;
     --gray-600: #5a5652;
-    --pass: #1a1a1a;
-    --fail: #888;
   }
-
-  body {
-    background: var(--white);
-    color: var(--black);
-    font-family: 'DM Mono', monospace;
-    min-height: 100vh;
-  }
-
-  header {
-    border-bottom: 2px solid var(--black);
-    padding: 28px 48px;
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-  }
-
-  .logo {
-    font-family: 'EB Garamond', serif;
-    font-size: 22px;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-  }
-
-  .date-label {
-    font-size: 11px;
-    color: var(--gray-400);
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
-
-  .meta-bar {
-    padding: 14px 48px;
-    border-bottom: 1px solid var(--gray-200);
-    display: flex;
-    gap: 40px;
-  }
-
-  .meta-item {
-    font-size: 11px;
-    color: var(--gray-400);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
-
-  .meta-item span {
-    color: var(--black);
-    font-weight: 500;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  thead tr {
-    border-bottom: 1px solid var(--black);
-  }
-
-  th {
-    font-family: 'DM Mono', monospace;
-    font-size: 10px;
-    font-weight: 500;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--gray-400);
-    padding: 14px 48px;
-    text-align: left;
-  }
-
-  td {
-    padding: 16px 48px;
-    font-size: 13px;
-    border-bottom: 1px solid var(--gray-100);
-    vertical-align: middle;
-  }
-
-  tbody tr {
-    transition: background 0.15s;
-  }
-
-  tbody tr:hover td {
-    background: var(--gray-100);
-  }
-
-  .col-name {
-    font-family: 'EB Garamond', serif;
-    font-size: 16px;
-    color: var(--black);
-  }
-
-  .col-time {
-    color: var(--gray-600);
-    font-size: 12px;
-    letter-spacing: 0.04em;
-  }
-
-  .badge {
-    display: inline-block;
-    font-size: 10px;
-    font-weight: 500;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    padding: 4px 10px;
-    border-radius: 2px;
-  }
-
-  .badge-pass {
-    background: var(--black);
-    color: var(--white);
-  }
-
-  .badge-fail {
-    background: transparent;
-    color: var(--gray-400);
-    border: 1px solid var(--gray-200);
-  }
-
-  .row-num {
-    color: var(--gray-200);
-    font-size: 11px;
-    width: 40px;
-    padding-left: 48px;
-    padding-right: 0;
-  }
-
-  footer {
-    border-top: 1px solid var(--gray-200);
-    padding: 20px 48px;
-    font-size: 11px;
-    color: var(--gray-400);
-    letter-spacing: 0.08em;
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(4px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-
-  tbody tr {
-    animation: fadeIn 0.3s ease both;
-  }
+  body { background: var(--white); color: var(--black); font-family: 'DM Mono', monospace; min-height: 100vh; }
+  header { border-bottom: 2px solid var(--black); padding: 28px 48px; display: flex; align-items: baseline; justify-content: space-between; }
+  .logo { font-family: 'EB Garamond', serif; font-size: 22px; font-weight: 500; letter-spacing: 0.02em; }
+  .date-label { font-size: 11px; color: var(--gray-400); letter-spacing: 0.12em; text-transform: uppercase; }
+  .meta-bar { padding: 14px 48px; border-bottom: 1px solid var(--gray-200); display: flex; gap: 40px; }
+  .meta-item { font-size: 11px; color: var(--gray-400); letter-spacing: 0.1em; text-transform: uppercase; }
+  .meta-item span { color: var(--black); font-weight: 500; }
+  table { width: 100%; border-collapse: collapse; }
+  thead tr { border-bottom: 1px solid var(--black); }
+  th { font-size: 10px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gray-400); padding: 14px 48px; text-align: left; }
+  td { padding: 16px 48px; font-size: 13px; border-bottom: 1px solid var(--gray-100); vertical-align: middle; }
+  tbody tr { transition: background 0.15s; animation: fadeIn 0.3s ease both; }
+  tbody tr:hover td { background: var(--gray-100); }
+  .col-name { font-family: 'EB Garamond', serif; font-size: 16px; color: var(--black); }
+  .col-time { color: var(--gray-600); font-size: 12px; letter-spacing: 0.04em; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; padding: 4px 10px; border-radius: 2px; }
+  .badge-pass { background: var(--black); color: var(--white); }
+  .badge-fail { background: transparent; color: var(--gray-400); border: 1px solid var(--gray-200); }
+  .badge svg { width: 11px; height: 11px; flex-shrink: 0; }
+  .row-num { color: var(--gray-200); font-size: 11px; width: 40px; padding-left: 48px; padding-right: 0; }
+  footer { border-top: 1px solid var(--gray-200); padding: 20px 48px; font-size: 11px; color: var(--gray-400); letter-spacing: 0.08em; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
   {% for i in range(records|length) %}
   tbody tr:nth-child({{ i+1 }}) { animation-delay: {{ i * 0.03 }}s; }
   {% endfor %}
 </style>
 </head>
 <body>
-
 <header>
   <div class="logo">Հաճախումների Մատյան</div>
   <div class="date-label" id="today-date"></div>
 </header>
-
 <div class="meta-bar">
-  <div class="meta-item">Ընդհանուր գրառումներ: <span>{{ records|length }}</span></div>
-  <div class="meta-item">Ժամանակին: <span>{{ records|selectattr('on_time')|list|length }}</span></div>
-  <div class="meta-item">Ուշացում: <span>{{ records|rejectattr('on_time')|list|length }}</span></div>
+  <div class="meta-item">Ընդամենը՝ <span>{{ total }}</span></div>
+  <div class="meta-item">Ժամանակին՝ <span>{{ pass_count }}</span></div>
+  <div class="meta-item">Ուշացում՝ <span>{{ fail_count }}</span></div>
 </div>
-
 <table>
-  <thead>
-    <tr>
-      <th style="width:60px;">#</th>
-      <th>Անուն</th>
-      <th>Ժամանակ</th>
-      <th>Կարգավիճակ</th>
-    </tr>
-  </thead>
+  <thead><tr>
+    <th style="width:60px;">#</th>
+    <th>Անուն</th>
+    <th>Ժամանակ</th>
+    <th>Կարգավիճak</th>
+  </tr></thead>
   <tbody>
     {% for r in records %}
     <tr>
       <td class="row-num">{{ loop.index }}</td>
-      <td class="col-name">{{ r.get('user_type', '—') }}</td>
-      <td class="col-time">{{ r.get('received_at_formatted', '—') }}</td>
+      <td class="col-name">{{ r.user_type }}</td>
+      <td class="col-time">{{ r.received_at_formatted }}</td>
       <td>
-        {% if r.get('on_time') %}
-          <span class="badge badge-pass">Ժամանակին</span>
+        {% if r.on_time_bool %}
+          <span class="badge badge-pass">
+            <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M2 6L5 9L10 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Ժամанаkин
+          </span>
         {% else %}
-          <span class="badge badge-fail">Ուշացում</span>
+          <span class="badge badge-fail">
+            <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 3L9 9M9 3L3 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+            Ուшацум
+          </span>
         {% endif %}
       </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
-
 <footer id="footer-ts"></footer>
-
 <script>
-  // Ամսաթիվ
   const now = new Date();
+  const months = ['հունվարի','փետրվарի','մартի','ապрилի','майи','հունիসի','հулиси','оগostи','сентембери','հоктембери','ноябрի','дектори'];
   document.getElementById('today-date').textContent =
-    now.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' });
+    now.getDate() + ' ' + months[now.getMonth()] + ' ' + now.getFullYear();
   document.getElementById('footer-ts').textContent =
-    'Վերջին թարմացում: ' + now.toLocaleTimeString('ru-RU');
+    'Վерجин тарм.' + now.toLocaleTimeString('ru-RU');
 
-  // Polling
   let lastCount = {{ count }};
   setInterval(() => {
     fetch('/scan_count')
@@ -380,9 +268,20 @@ def all_scans_view():
                 data = json.load(f)
                 dt = datetime.fromisoformat(data.get("received_at"))
                 data["received_at_formatted"] = dt.strftime("%d.%m.%Y  %H:%M:%S")
+                data["on_time_bool"] = normalize_on_time(data.get("on_time"))
                 all_records.append(data)
 
-    return render_template_string(ALL_SCANS_HTML, records=all_records, count=len(all_records))
+    pass_count = sum(1 for r in all_records if r["on_time_bool"])
+    fail_count = len(all_records) - pass_count
+
+    return render_template_string(
+        ALL_SCANS_HTML,
+        records=all_records,
+        count=len(all_records),
+        total=len(all_records),
+        pass_count=pass_count,
+        fail_count=fail_count,
+    )
 
 
 if __name__ == "__main__":
