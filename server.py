@@ -243,7 +243,7 @@ ALL_SCANS_HTML = """<!DOCTYPE html>
   document.getElementById('today-date').textContent =
     now.getDate() + ' ' + months[now.getMonth()] + ' ' + now.getFullYear();
   document.getElementById('footer-ts').textContent =
-    'Վերջին թարմացում' + now.toLocaleTimeString('ru-RU');
+    'Վերջին թարմացում ' + now.toLocaleTimeString('ru-RU');
 
   let lastCount = {{ count }};
   setInterval(() => {
