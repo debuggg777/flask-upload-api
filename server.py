@@ -239,11 +239,11 @@ ALL_SCANS_HTML = """<!DOCTYPE html>
 <footer id="footer-ts"></footer>
 <script>
   const now = new Date();
-  const months = ['հունվարի','փետրվарի','մартի','ապрилի','майи','հունիসի','հулиси','оগostи','сентембери','հоктембери','ноябрի','дектори'];
+  const months = ['հունվարի','Փետրվարի','Մարտի','Ապրիլի','Մայիսի','Հունիսի','Հուլիսի','Օգոստոսի','Սեպտեմբերի','Հոկտեմբերի','Նոյեմբերի','Դեկտեմբերի'];
   document.getElementById('today-date').textContent =
     now.getDate() + ' ' + months[now.getMonth()] + ' ' + now.getFullYear();
   document.getElementById('footer-ts').textContent =
-    'Վерجин тарм.' + now.toLocaleTimeString('ru-RU');
+    'Վերջին թարմացում' + now.toLocaleTimeString('ru-RU');
 
   let lastCount = {{ count }};
   setInterval(() => {
